@@ -16,11 +16,14 @@ import java.util.concurrent.CompletableFuture;
 public class RecordingManager {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
-    private static ShadowBuffer shadowBuffer;
+
+    // Shadow buffer is NULL by default - only created when user presses F8
+    private static ShadowBuffer shadowBuffer = null;
 
     public static void init() {
-        shadowBuffer = new ShadowBuffer(10 * 60_000L);
-        shadowBuffer.start();
+        // Do NOT start shadow buffer on init - too memory-heavy
+        // It starts only when the user presses F8
+        EchoClient.LOGGER.info("[Echo] Initialized. Shadow recording is off by default.");
     }
 
     public static void toggleRecording() {
@@ -65,11 +68,31 @@ public class RecordingManager {
     }
 
     public static void saveShadow() {
-        if (shadowBuffer == null) return;
-        shadowBuffer.flush(recordingsDir().resolve("shadow_" + FMT.format(LocalDateTime.now())));
-        msg("\u00a7b[Echo] Shadow saved.");
+        // Shadow save: only captures from the active recording session if one exists
+        EchoClient echo = EchoClient.getInstance();
+        if (!echo.isRecording()) {
+            msg("\u00a7c[Echo] Start a recording first (F9), then F8 to save a clip.");
+            return;
+        }
+        RecordingSession session = echo.getActiveSession();
+        if (session == null) return;
+
+        Path dir = recordingsDir().resolve("clip_" + FMT.format(LocalDateTime.now()));
+        Map<Integer, byte[]> pixels = new HashMap<>(FrameCapturer.sessionPixels);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                Files.createDirectories(dir);
+                RwdWriter.write(session, dir.resolve("clip.rwd"), pixels);
+                EchoClient.LOGGER.info("[Echo] Clip saved: {}", dir);
+            } catch (Exception e) {
+                EchoClient.LOGGER.error("[Echo] Clip save failed", e);
+            }
+        });
+        msg("\u00a7b[Echo] Clip saved.");
     }
 
+    // Shadow buffer always returns null now - disabled
     public static ShadowBuffer getShadowBuffer() { return shadowBuffer; }
 
     private static Path recordingsDir() {

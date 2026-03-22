@@ -15,9 +15,10 @@ public class FrameCapturer {
     private static int frameIndex = 0;
     private static ByteBuffer reusableBuffer = null;
     private static int lastBufferSize = 0;
+    private static long lastCaptureMs = 0;
+    private static final long MIN_FRAME_INTERVAL_MS = 33; // cap at ~30fps
 
     public static final Map<Integer, byte[]> sessionPixels = new ConcurrentHashMap<>();
-    public static final Map<Integer, byte[]> shadowPixels  = new ConcurrentHashMap<>();
 
     private static final ExecutorService encoder = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "echo-encoder");
@@ -29,27 +30,41 @@ public class FrameCapturer {
         EchoClient echo = EchoClient.getInstance();
         if (echo == null) return;
 
-        // CRITICAL: only capture when actually recording or shadow is enabled
-        boolean sessionActive = echo.isRecording();
-        boolean shadowActive  = RecordingManager.getShadowBuffer() != null;
-        if (!sessionActive && !shadowActive) return;
+        // Only capture when actively recording - no background capture at all
+        if (!echo.isRecording()) return;
+
+        // Throttle to 30fps max to limit memory usage during long recordings
+        long now = System.currentTimeMillis();
+        if (now - lastCaptureMs < MIN_FRAME_INTERVAL_MS) return;
+        lastCaptureMs = now;
 
         MinecraftClient mc = MinecraftClient.getInstance();
         int width  = mc.getWindow().getFramebufferWidth();
         int height = mc.getWindow().getFramebufferHeight();
-        long now   = System.currentTimeMillis();
         int index  = frameIndex++;
 
         byte[] pixels = readPixels(width, height);
         if (pixels == null) return;
 
-        encoder.submit(() -> processFrame(pixels, width, height, now, index, sessionActive, shadowActive));
+        final long ts = now;
+        encoder.submit(() -> {
+            RecordingSession session = EchoClient.getInstance().getActiveSession();
+            if (session != null && session.isActive()) {
+                session.addFrameEntry(new RecordingSession.FrameEntry(ts, index, width, height));
+                sessionPixels.put(index, pixels);
+
+                // Keep session pixel map bounded - drop oldest if over 900 frames (~30s at 30fps)
+                if (sessionPixels.size() > 900) {
+                    sessionPixels.keySet().stream()
+                        .sorted().limit(60).forEach(sessionPixels::remove);
+                }
+            }
+        });
     }
 
     private static byte[] readPixels(int width, int height) {
         try {
             int needed = width * height * 4;
-            // Reuse a single direct buffer — never allocate per frame
             if (reusableBuffer == null || lastBufferSize != needed) {
                 reusableBuffer = ByteBuffer.allocateDirect(needed);
                 lastBufferSize = needed;
@@ -62,27 +77,6 @@ public class FrameCapturer {
         } catch (Exception e) {
             EchoClient.LOGGER.error("[Echo] readPixels failed", e);
             return null;
-        }
-    }
-
-    private static void processFrame(byte[] pixels, int width, int height,
-                                     long tsMs, int index,
-                                     boolean sessionActive, boolean shadowActive) {
-        RecordingSession session = EchoClient.getInstance().getActiveSession();
-        ShadowBuffer shadow      = RecordingManager.getShadowBuffer();
-        RecordingSession.FrameEntry entry = new RecordingSession.FrameEntry(tsMs, index, width, height);
-
-        if (sessionActive && session != null && session.isActive()) {
-            session.addFrameEntry(entry);
-            sessionPixels.put(index, pixels);
-        }
-        if (shadowActive && shadow != null) {
-            shadow.pushFrame(entry);
-            shadowPixels.put(index, pixels);
-            // Prevent shadow pixel map from growing unboundedly
-            if (shadowPixels.size() > 1200) {
-                shadowPixels.keySet().stream().sorted().limit(200).forEach(shadowPixels::remove);
-            }
         }
     }
 
