@@ -5,6 +5,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.text.Text;
@@ -41,7 +42,7 @@ public class ReplayViewerScreen extends Screen {
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Close"), b -> {
             ReplayManager.closeReplay(); this.close();
-        }).dimensions(cx + 85, cy, 60, 20).build());
+        }).bounds(cx + 85, cy, 60, 20).build());
 
         session.play();
     }
@@ -50,7 +51,6 @@ public class ReplayViewerScreen extends Screen {
     public void render(DrawContext ctx, int mx, int my, float delta) {
         this.renderBackground(ctx, mx, my, delta);
 
-        // Update HUD texture if frame changed
         RecordingSession.FrameEntry frame = session.currentFrame();
         if (frame != null && frame.frameIndex() != lastFrame) {
             byte[] px = session.framePixels(frame.frameIndex());
@@ -60,15 +60,10 @@ public class ReplayViewerScreen extends Screen {
             }
         }
 
-        // Draw captured HUD frame as fullscreen overlay
         if (hudLoaded) {
-            ctx.drawTexture(
-                net.minecraft.client.render.RenderLayer::getGuiTextured,
-                HUD_TEX,
-                0, 0, 0f, 0f,
-                this.width, this.height,
-                this.width, this.height
-            );
+            // Function<Identifier, RenderLayer>, Identifier, x, y, u, v, w, h, texW, texH
+            ctx.drawTexture(RenderLayer::getGuiTextured, HUD_TEX,
+                0, 0, 0f, 0f, this.width, this.height, this.width, this.height);
         }
 
         drawTimeline(ctx);
