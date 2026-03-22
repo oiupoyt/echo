@@ -16,10 +16,8 @@ public class EchoKeybinds {
     public static KeyBinding openReplay;
 
     public static void register() {
-        KeyBinding.Category category = new KeyBinding.Category(
-            Identifier.of("echo", "keys"),
-            100  // sort order - higher = lower in the list
-        );
+        // 1.21.9+: KeyBinding.Category is a record taking (Identifier) only
+        KeyBinding.Category category = new KeyBinding.Category(Identifier.of("echo", "keys"));
 
         toggleRecording = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.echo.toggle_recording", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F9, category));

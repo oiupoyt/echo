@@ -2,10 +2,10 @@ package dev.kat.echo.replay;
 
 import dev.kat.echo.recording.RecordingSession;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.text.Text;
@@ -42,7 +42,7 @@ public class ReplayViewerScreen extends Screen {
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Close"), b -> {
             ReplayManager.closeReplay(); this.close();
-        }).bounds(cx + 85, cy, 60, 20).build());
+        }).dimensions(cx + 85, cy, 60, 20).build());
 
         session.play();
     }
@@ -61,8 +61,8 @@ public class ReplayViewerScreen extends Screen {
         }
 
         if (hudLoaded) {
-            // Function<Identifier, RenderLayer>, Identifier, x, y, u, v, w, h, texW, texH
-            ctx.drawTexture(RenderLayer::getGuiTextured, HUD_TEX,
+            // 1.21.6+ Yarn: drawTexture(RenderPipeline, Identifier, x, y, u, v, w, h, texW, texH)
+            ctx.drawTexture(RenderPipelines.GUI_TEXTURED, HUD_TEX,
                 0, 0, 0f, 0f, this.width, this.height, this.width, this.height);
         }
 
