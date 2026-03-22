@@ -13,6 +13,8 @@ import java.util.concurrent.Executors;
 public class FrameCapturer {
 
     private static int frameIndex = 0;
+    private static ByteBuffer reusableBuffer = null;
+    private static int lastBufferSize = 0;
 
     public static final Map<Integer, byte[]> sessionPixels = new ConcurrentHashMap<>();
     public static final Map<Integer, byte[]> shadowPixels  = new ConcurrentHashMap<>();
@@ -26,6 +28,8 @@ public class FrameCapturer {
     public static void onFrameEnd() {
         EchoClient echo = EchoClient.getInstance();
         if (echo == null) return;
+
+        // CRITICAL: only capture when actually recording or shadow is enabled
         boolean sessionActive = echo.isRecording();
         boolean shadowActive  = RecordingManager.getShadowBuffer() != null;
         if (!sessionActive && !shadowActive) return;
@@ -37,15 +41,28 @@ public class FrameCapturer {
         int index  = frameIndex++;
 
         byte[] pixels = readPixels(width, height);
+        if (pixels == null) return;
+
         encoder.submit(() -> processFrame(pixels, width, height, now, index, sessionActive, shadowActive));
     }
 
     private static byte[] readPixels(int width, int height) {
-        ByteBuffer buf   = ByteBuffer.allocateDirect(width * height * 4);
-        GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buf);
-        byte[] bytes = new byte[buf.remaining()];
-        buf.get(bytes);
-        return bytes;
+        try {
+            int needed = width * height * 4;
+            // Reuse a single direct buffer — never allocate per frame
+            if (reusableBuffer == null || lastBufferSize != needed) {
+                reusableBuffer = ByteBuffer.allocateDirect(needed);
+                lastBufferSize = needed;
+            }
+            reusableBuffer.clear();
+            GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, reusableBuffer);
+            byte[] bytes = new byte[needed];
+            reusableBuffer.get(bytes);
+            return bytes;
+        } catch (Exception e) {
+            EchoClient.LOGGER.error("[Echo] readPixels failed", e);
+            return null;
+        }
     }
 
     private static void processFrame(byte[] pixels, int width, int height,
@@ -62,8 +79,10 @@ public class FrameCapturer {
         if (shadowActive && shadow != null) {
             shadow.pushFrame(entry);
             shadowPixels.put(index, pixels);
-            if (shadowPixels.size() > 18000)
-                shadowPixels.keySet().stream().sorted().limit(100).forEach(shadowPixels::remove);
+            // Prevent shadow pixel map from growing unboundedly
+            if (shadowPixels.size() > 1200) {
+                shadowPixels.keySet().stream().sorted().limit(200).forEach(shadowPixels::remove);
+            }
         }
     }
 
