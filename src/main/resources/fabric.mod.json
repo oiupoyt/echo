@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "echo",
+  "version": "${version}",
+  "name": "Echo",
+  "description": "In-game recorder with HUD capture and replay viewer.",
+  "authors": ["kat"],
+  "license": "MIT",
+  "entrypoints": {
+    "client": ["dev.kat.echo.EchoClient"]
+  },
+  "mixins": ["echo.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "fabric-api": "*",
+    "minecraft": "1.21.11"
+  }
+}

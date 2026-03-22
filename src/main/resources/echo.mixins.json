@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.kat.echo.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": ["GameRendererMixin", "ClientConnectionMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

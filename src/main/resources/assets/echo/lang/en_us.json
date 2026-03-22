@@ -1,0 +1,6 @@
+{
+  "category.echo": "Echo",
+  "key.echo.toggle_recording": "Toggle Recording",
+  "key.echo.save_shadow": "Save Shadow Recording",
+  "key.echo.open_replay": "Open Replay Browser"
+}
